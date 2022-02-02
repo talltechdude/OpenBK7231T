@@ -1,0 +1,89 @@
+name: Release
+on:
+  push:
+    branches:
+      #- 'main'
+      - '*'
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  APP: "my_alpha_demo"
+
+jobs:
+  refs:
+    name: Prepare CI Vars
+    runs-on: ubuntu-18.04
+    outputs:
+      sha_short: ${{ steps.refs.outputs.sha_short }}
+      short_ref: ${{ steps.refs.outputs.short_ref }}
+      version: ${{ steps.refs.outputs.version }}
+    steps:
+      - name: Source checkout
+        uses: actions/checkout@v2
+      - name: Semantic Release
+        id: semantic
+        uses: cycjimmy/semantic-release-action@v2
+        with:
+          dry_run: true
+          semantic_version: 18
+          extra_plugins: |
+            @semantic-release/changelog
+            @semantic-release/git
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set outputs
+        id: refs
+        run: |
+          export BRANCH=${GITHUB_REF#refs/*/}
+          echo "branch: ${BRANCH}"
+          export BRANCHTRANSLATED=$(echo ${BRANCH} | tr '/' '_')
+          echo "short_ref: ${BRANCHTRANSLATED}"
+          export VERSION=""
+          if ${{ steps.semantic.outputs.new_release_published == 'true' }}; then
+            export VERSION=${{ steps.semantic.outputs.new_release_version }}
+          else
+            export VERSION=${BRANCHTRANSLATED}
+          fi
+          echo "New semantic release: ${{ steps.semantic.outputs.new_release_published }}"
+          echo "version: ${VERSION}"
+          echo "::set-output name=short_ref::${BRANCHTRANSLATED}"
+          echo "::set-output name=sha_short::SHA-$(git rev-parse --short=12 HEAD)"
+          echo "::set-output name=version::${VERSION}"
+  build:
+    name: Build
+    needs: refs
+    runs-on: i386/python:3
+    steps:
+      - name: Source checkout
+        uses: actions/checkout@v2
+      - run: ls -la
+      - run: ./build_app.sh apps/${{ env.APP }} ${{ env.APP }} ${{ steps.semantic.outputs.new_release_version }}
+
+  release:
+    name: Semantic Release Images and Artifacts
+    runs-on: ubuntu-18.04
+    needs: [ refs, argocd-image ]
+    env:
+      DOCKER_USERNAME: ${{ github.repository_owner }}
+      DOCKER_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Source checkout
+        uses: actions/checkout@v2
+      - name: Run Semantic Release
+        id: semantic
+        uses: cycjimmy/semantic-release-action@v2
+        with:
+          dry_run: false
+          semantic_version: 18
+          extra_plugins: |
+            @semantic-release/changelog
+            @semantic-release/git
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Echo Semantic Release Versions
+        if: steps.semantic.outputs.new_release_published == 'true'
+        run: |
+          echo ${{ steps.semantic.outputs.new_release_version }}
+          echo ${{ steps.semantic.outputs.new_release_major_version }}
+          echo ${{ steps.semantic.outputs.new_release_minor_version }}
+          echo ${{ steps.semantic.outputs.new_release_patch_version }}
