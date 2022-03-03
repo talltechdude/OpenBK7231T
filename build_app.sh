@@ -1,23 +1,36 @@
 #!/bin/sh
+fatal() {
+    echo "\033[0;31merror: $1\033[0m"
+    echo
+    echo "Usage: $0 app_path app_name [app_version [user_cmd]]"
+    echo "see https://github.com/openshwprojects/OpenBK7231T_App/ for full info"
+    exit 1
+}
+
+
 
 APP_PATH=$1
 APP_NAME=$2
 APP_VERSION=$3
 USER_CMD=$4
+
+[ -z $APP_PATH ] && fatal "no app path!"
+[ -z $APP_NAME ] && fatal "no app name!"
+
+[ "$APP_VERSION" = "git" ] && APP_VERSION="`(head -c8 $APP_PATH/.git/refs/heads/main)`"
+[ -z "$APP_VERSION" ] && [ -z $USER_CMD ] && APP_VERSION="`(head -c8 $APP_PATH/.git/refs/heads/main)`"
+
+if [ -z "${APP_VERSION}" ]; then 
+	echo "App version not specified (or git command failed on Cygwin), using 1.0.0"
+    APP_VERSION='1.0.0'
+fi
+
 echo APP_PATH=$APP_PATH
 echo APP_NAME=$APP_NAME
 echo APP_VERSION=$APP_VERSION
 echo USER_CMD=$USER_CMD
 
 
-fatal() {
-    echo -e "\033[0;31merror: $1\033[0m"
-    exit 1
-}
-
-
-[ -z $APP_PATH ] && fatal "no app path!"
-[ -z $APP_NAME ] && fatal "no app name!"
 [ -z $APP_VERSION ] && fatal "no version!"
 
 
@@ -73,7 +86,7 @@ if [ -f build.sh ]; then
     sh ./build.sh $APP_NAME $APP_VERSION $TARGET_PLATFORM $USER_CMD
 elif [ -f Makefile -o -f makefile ]; then
     export COMPILE_PREX TARGET_PLATFORM
-    make APP_BIN_NAME=$APP_NAME USER_SW_VER=$APP_VERSION all
+    make APP_BIN_NAME=$APP_NAME APP_NAME=$APP_NAME APP_VERSION=$APP_VERSION USER_SW_VER=$APP_VERSION USER_CMD=$USER_CMD all
 elif [ -f ${ROOT_DIR}/platforms/$TARGET_PLATFORM/toolchain/$TUYA_APPS_BUILD_PATH/$TUYA_APPS_BUILD_CMD ]; then
     cd ${ROOT_DIR}/platforms/$TARGET_PLATFORM/toolchain/$TUYA_APPS_BUILD_PATH
     sh $TUYA_APPS_BUILD_CMD $APP_NAME $APP_VERSION $TARGET_PLATFORM $USER_CMD
